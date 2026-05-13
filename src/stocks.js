@@ -10,10 +10,11 @@ export const COMPANY = { name: '제일기획', code: '030000', market: 'KOSPI' }
 export const KOREAN_COMPETITOR = { name: '이노션', code: '214320', market: 'KOSDAQ' };
 
 // 국내 벤치마크 지수
-// ※ KOSPI 일반서비스업은 KRX 정식 Open API 승인 대기 중 → 임시로 KPI200 사용
+// - KOSPI: 네이버 siseJson (시계열 포함)
+// - KOSPI 일반서비스: KRX Open API 공식 데이터 (일일 데이터만; 시계열 백필은 차후)
 export const KOREAN_INDEXES = [
-  { name: 'KOSPI', code: 'KOSPI' },
-  { name: 'KOSPI 200', code: 'KPI200', note: 'KOSPI 일반서비스업 정식 API 인증 대기 중 임시 대체' },
+  { name: 'KOSPI', code: 'KOSPI', source: 'naver' },
+  { name: 'KOSPI 일반서비스', krxName: '일반서비스', source: 'krx' },
 ];
 
 // 글로벌 광고대행사 4사
@@ -124,7 +125,87 @@ export async function fetchKoreanStock(cfg, fromDate) {
   return fetchNaverSeries(cfg, fromDate, false);
 }
 
-export async function fetchKoreanIndex(cfg, fromDate) {
+// ================== KRX Open API - 일반서비스 지수 (공식) ==================
+
+/**
+ * 특정일의 KOSPI 시리즈 지수 1개 조회 (KRX 정식 Open API)
+ * @param {string} dateStr - 'YYYY-MM-DD'
+ * @param {string} indexName - KRX 응답의 IDX_NM (trim된 한글명, 예: '일반서비스')
+ * @param {object} env - 워커 환경 (KRX_AUTH_KEY)
+ */
+async function fetchKrxIndex(dateStr, indexName, env) {
+  const basDd = dateStr.replace(/-/g, '');
+  const url = `https://data-dbg.krx.co.kr/svc/apis/idx/kospi_dd_trd?basDd=${basDd}`;
+
+  const res = await fetch(url, {
+    headers: { 'AUTH_KEY': env.KRX_AUTH_KEY },
+    cf: { cacheTtl: 600 },
+  });
+  if (!res.ok) throw new Error(`KRX API ${res.status}`);
+
+  const data = await res.json();
+  const items = data?.OutBlock_1 || [];
+  const item = items.find((it) => (it.IDX_NM || '').trim() === indexName);
+  if (!item) throw new Error(`'${indexName}' 지수 못 찾음 (${items.length}개 지수 중)`);
+
+  return {
+    basDd: item.BAS_DD,
+    name: item.IDX_NM.trim(),
+    close: parseFloat(item.CLSPRC_IDX),
+    change: parseFloat(item.CMPPREVDD_IDX),
+    changeRate: parseFloat(item.FLUC_RT),
+  };
+}
+
+/**
+ * 최근 영업일 KRX 지수 조회 (휴장일/익일 업데이트 지연 대비 폴백)
+ * KRX 함정: 전일 데이터는 익일 08시 업데이트, 휴장일 응답 없음
+ */
+async function fetchKrxIndexLatest(indexName, env, maxBack = 7) {
+  const errors = [];
+  const today = kstNow();
+  for (let i = 1; i <= maxBack; i++) {
+    const d = new Date(today.getTime() - i * 86400 * 1000);
+    const dateStr = d.toISOString().slice(0, 10);
+    try {
+      const result = await fetchKrxIndex(dateStr, indexName, env);
+      if (result && !Number.isNaN(result.close) && result.close > 0) return result;
+    } catch (e) {
+      errors.push(`${dateStr}: ${e.message}`);
+    }
+  }
+  throw new Error(`최근 ${maxBack}영업일 KRX 데이터 없음: ${errors.slice(0, 3).join('; ')}`);
+}
+
+export async function fetchKoreanIndex(cfg, fromDate, env) {
+  if (cfg.source === 'krx') {
+    // KRX Open API 경로 (일반서비스 지수 등)
+    try {
+      const krx = await fetchKrxIndexLatest(cfg.krxName, env);
+      return {
+        name: cfg.name, // UI 라벨: "KOSPI 일반서비스"
+        code: cfg.krxName,
+        currency: 'pt',
+        price: krx.close,
+        change: krx.change,
+        change_pct: krx.changeRate,
+        volume: 0,
+        market_cap: '',
+        history: [], // KRX Open API는 일자별 단일조회만 — 시계열 백필은 향후
+        tradeDate: `${krx.basDd.slice(0,4)}-${krx.basDd.slice(4,6)}-${krx.basDd.slice(6,8)}`,
+        url: 'https://data.krx.co.kr/',
+        source: 'KRX Open API',
+      };
+    } catch (e) {
+      console.error(`[KRX 지수 실패] ${cfg.name}: ${e.message}`);
+      return {
+        name: cfg.name, code: cfg.krxName, currency: 'pt',
+        price: 0, change: 0, change_pct: 0, volume: 0, market_cap: '',
+        history: [], error: e.message, source: 'KRX Open API',
+      };
+    }
+  }
+  // 기본: 네이버 siseJson 경로 (KOSPI 등 시계열 지원)
   return fetchNaverSeries(cfg, fromDate, true);
 }
 
@@ -211,12 +292,13 @@ export async function fetchYahooFinance(competitor, fromDate) {
 
 /**
  * fromDate: 'YYYYMMDD' (env.HISTORY_START에서 변환)
+ * env: KRX_AUTH_KEY 포함된 워커 환경 (KRX 호출용)
  */
-export async function fetchAllMarketData(fromDate) {
+export async function fetchAllMarketData(fromDate, env) {
   const [main, korCompetitor, ...rest] = await Promise.all([
     fetchKoreanStock(COMPANY, fromDate),
     fetchKoreanStock(KOREAN_COMPETITOR, fromDate),
-    ...KOREAN_INDEXES.map((idx) => fetchKoreanIndex(idx, fromDate)),
+    ...KOREAN_INDEXES.map((idx) => fetchKoreanIndex(idx, fromDate, env)),
     ...GLOBAL_COMPETITORS.map((c) => fetchYahooFinance(c, fromDate)),
   ]);
 

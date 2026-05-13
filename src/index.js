@@ -26,7 +26,7 @@ async function buildAndStoreReport(env) {
   // 1. 모든 데이터 병렬 수집 (12/1부터 시계열)
   console.log('[1/3] 데이터 수집 (12/1~당일 시계열)...');
   const [stockResult, forexList, newsList] = await Promise.all([
-    fetchAllMarketData(histDate),
+    fetchAllMarketData(histDate, env),
     fetchAllForex(histIso),
     collectTopNews(env, 5),
   ]);

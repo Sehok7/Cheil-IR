@@ -18,6 +18,7 @@ bucket_name = "cheil-ir-reports"
 # - ANTHROPIC_API_KEY
 # - NAVER_CLIENT_ID
 # - NAVER_CLIENT_SECRET
+# - KRX_AUTH_KEY      ← KRX Open API 인증키 (KOSPI 일반서비스 지수)
 
 [vars]
 COMPANY_NAME = "제일기획"

@@ -150,8 +150,9 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
   const isMainUp = main.change_pct >= 0;
   const isKorUp = kor.change_pct >= 0;
 
-  // 정규화 비교 차트용 데이터셋: 자사 + 이노션 + 지수 2 + 글로벌 4 = 8개
+  // 정규화 비교 차트용 데이터셋: 자사 + 이노션 + 지수 + 글로벌 4
   // 모두 12/1 기준 100 정규화 → 누적 수익률 % 표시
+  // ※ history 없는 데이터셋(KRX 일반서비스 등 일일 단일조회)은 자동 제외
   const normalizedDatasets = [
     { name: `${main.name} (자사)`, data: normalizeSeries(main.history), color: '#0a2540', width: 3 },
     { name: kor.name, data: normalizeSeries(kor.history), color: '#1e88e5', width: 2 },
@@ -168,15 +169,19 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
       color: ['#d23c3c', '#f59e0b', '#10b981', '#a855f7'][idx] || '#666',
       width: 1.8,
     })),
-  ];
+  ].filter((ds) => ds.data.length > 0);
 
   // 공통 x축 라벨 (자사 history 기준)
   const xLabels = (main.history || []).map((h) => h.date);
 
   // ─── 카드들 렌더 ───
   const indexCards = indexes
-    .map(
-      (i, idx) => `
+    .map((i, idx) => {
+      const hasHistory = (i.history || []).length > 0;
+      const rightSide = hasHistory
+        ? `<div class="idx-mini-chart"><canvas id="idxChart${idx}"></canvas></div>`
+        : `<div class="idx-mini-chart" style="display:flex;align-items:flex-end;justify-content:flex-end;font-size:9px;color:var(--gray-500);text-align:right;line-height:1.3;padding-bottom:2px">KRX 공식<br>Open API</div>`;
+      return `
     <div class="index-card">
       <div>
         <div class="idx-name">${escapeHtml(i.name)}</div>
@@ -185,9 +190,9 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
           ${i.change_pct >= 0 ? '▲' : '▼'} ${formatPct(i.change_pct)}
         </div>
       </div>
-      <div class="idx-mini-chart"><canvas id="idxChart${idx}"></canvas></div>
-    </div>`
-    )
+      ${rightSide}
+    </div>`;
+    })
     .join('');
 
   const globalCards = globals
@@ -337,7 +342,7 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
   <div class="section">
     <div class="section-title">
       국내 벤치마크 지수
-      <span class="note">※ KOSPI 일반서비스업 지수 정식 API 인증 대기 중으로 KOSPI 200 임시 대체</span>
+      <span class="note">※ KOSPI는 네이버 금융, 일반서비스는 한국거래소(KRX) 공식 Open API</span>
     </div>
     <div class="index-grid">${indexCards}</div>
   </div>
