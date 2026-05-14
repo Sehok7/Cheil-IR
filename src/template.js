@@ -50,8 +50,12 @@ const CSS = `
   .idx-up { color: var(--red); }
   .idx-down { color: var(--blue); }
   .idx-mini-chart { height: 56px; position: relative; }
-  /* Global competitor grid */
-  .competitor-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  /* Competitor grid (국내 1 + 글로벌 4 = 5장) */
+  .competitor-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 16px; }
+  .competitor-card.is-kor { border-color: var(--navy); }
+  .competitor-card .comp-flag { display: inline-block; font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 3px; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .competitor-card .comp-flag.kor { background: rgba(10,37,64,0.08); color: var(--navy); }
+  .competitor-card .comp-flag.global { background: rgba(138,138,138,0.12); color: var(--gray-700); }
   .competitor-card { background: var(--white); border: 1px solid var(--border); border-radius: 8px; padding: 18px 20px; transition: border-color 0.15s; }
   .competitor-card:hover { border-color: var(--navy); }
   .competitor-card .comp-name { font-size: 13px; font-weight: 700; color: var(--gray-700); margin-bottom: 2px; }
@@ -76,6 +80,16 @@ const CSS = `
   .normalized-chart-wrap .chart-title { font-size: 14px; font-weight: 700; color: var(--navy); margin-bottom: 4px; }
   .normalized-chart-wrap .chart-subtitle { font-size: 12px; color: var(--gray-500); margin-bottom: 16px; }
   .normalized-chart-container { position: relative; height: 360px; }
+  /* Investor flow widget */
+  .investor-wrap { background: var(--white); border: 1px solid var(--border); border-radius: 8px; padding: 24px 28px; }
+  .investor-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+  .investor-stat { padding: 8px 4px; }
+  .investor-stat .stat-label { font-size: 11px; color: var(--gray-500); font-weight: 600; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .investor-stat .stat-value { font-size: 18px; font-weight: 800; color: var(--gray-900); letter-spacing: -0.5px; }
+  .investor-stat .stat-unit { font-size: 11px; color: var(--gray-500); font-weight: 500; margin-left: 4px; }
+  .investor-stat.up .stat-value { color: var(--red); }
+  .investor-stat.down .stat-value { color: var(--blue); }
+  .investor-chart-container { position: relative; height: 260px; }
   /* News */
   .news-list { background: var(--white); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
   .news-item { display: grid; grid-template-columns: 40px 1fr; gap: 16px; padding: 18px 24px; border-bottom: 1px solid var(--border); align-items: flex-start; }
@@ -107,12 +121,22 @@ const CSS = `
   .insight-block ul li:before { content: '▸'; position: absolute; left: 0; color: rgba(255,255,255,0.5); font-size: 11px; top: 11px; }
   .insight-block .cause-box { background: rgba(255,255,255,0.08); border-radius: 6px; padding: 14px 18px; margin-top: 8px; }
   .footer { text-align: center; font-size: 11px; color: var(--gray-500); margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--border); }
-  @media (max-width: 900px) {
-    .main-stock-card, .kor-comp-card { grid-template-columns: 1fr; }
-    .competitor-grid, .index-grid, .forex-grid { grid-template-columns: 1fr; }
-    .insight-grid { grid-template-columns: 1fr; }
-    .normalized-chart-container { height: 280px; }
+  @media (max-width: 1100px) {
+    .competitor-grid { grid-template-columns: repeat(3, 1fr); }
   }
+  @media (max-width: 900px) {
+    .main-stock-card { grid-template-columns: 1fr; }
+    .competitor-grid { grid-template-columns: repeat(2, 1fr); }
+    .index-grid, .forex-grid { grid-template-columns: 1fr; }
+    .insight-grid { grid-template-columns: 1fr; }
+    .normalized-chart-container, .toggle-chart-container { height: 280px; }
+    .investor-summary { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 600px) {
+    .competitor-grid { grid-template-columns: 1fr; }
+  }
+  /* Toggle chart (자사 vs 국내 지수) */
+  .toggle-chart-container { position: relative; height: 320px; }
 `;
 
 function fmtCurrency(value, currency) {
@@ -195,17 +219,33 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
     })
     .join('');
 
-  const globalCards = globals
+  // 경쟁사 통합 그리드: 이노션(국내) + 글로벌 4사 = 5장. 카드 디자인 통일.
+  const competitorsAll = [
+    {
+      name: kor.name,
+      ticker: kor.code,
+      exchange: kor.market || 'KOSDAQ',
+      currency: 'KRW',
+      price: kor.price,
+      change_pct: kor.change_pct,
+      history: kor.history || [],
+      _isKor: true,
+    },
+    ...globals.map((g) => ({ ...g, _isKor: false })),
+  ];
+
+  const competitorCards = competitorsAll
     .map(
-      (g, idx) => `
-    <div class="competitor-card">
-      <div class="comp-name">${escapeHtml(g.name)}</div>
-      <div class="comp-meta">${escapeHtml(g.exchange)} · ${escapeHtml(g.ticker)}</div>
-      <div class="comp-price">${fmtCurrency(g.price, g.currency)}<span class="comp-currency">${escapeHtml(g.currency)}</span></div>
-      <div class="comp-change ${g.change_pct >= 0 ? 'comp-up' : 'comp-down'}">
-        ${g.change_pct >= 0 ? '▲' : '▼'} ${formatPct(g.change_pct)}
+      (c, idx) => `
+    <div class="competitor-card ${c._isKor ? 'is-kor' : ''}">
+      <div class="comp-flag ${c._isKor ? 'kor' : 'global'}">${c._isKor ? '국내' : 'GLOBAL'}</div>
+      <div class="comp-name">${escapeHtml(c.name)}</div>
+      <div class="comp-meta">${escapeHtml(c.exchange)} · ${escapeHtml(String(c.ticker))}</div>
+      <div class="comp-price">${fmtCurrency(c.price, c.currency)}<span class="comp-currency">${escapeHtml(c.currency)}</span></div>
+      <div class="comp-change ${c.change_pct >= 0 ? 'comp-up' : 'comp-down'}">
+        ${c.change_pct >= 0 ? '▲' : '▼'} ${formatPct(c.change_pct)}
       </div>
-      <div class="comp-mini-chart"><canvas id="globalChart${idx}"></canvas></div>
+      <div class="comp-mini-chart"><canvas id="compChart${idx}"></canvas></div>
     </div>`
     )
     .join('');
@@ -306,36 +346,13 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
     </div>
   </div>
 
-  <!-- 2. 국내 경쟁사 (이노션) -->
+  <!-- 2. 경쟁사 (이노션 + 글로벌 4사 통합 그리드) -->
   <div class="section">
-    <div class="section-title">국내 경쟁사</div>
-    <div class="kor-comp-card">
-      <div class="stock-info">
-        <div class="label-tag">국내 경쟁사</div>
-        <div class="company">${escapeHtml(kor.name.toUpperCase())} · KOSDAQ ${escapeHtml(kor.code)}</div>
-        <div class="name">${escapeHtml(kor.name)}</div>
-        <div class="price">${formatNumber(kor.price)}<span class="price-unit">원</span></div>
-        <div class="change ${isKorUp ? 'up' : 'down'}">
-          <span>${isKorUp ? '▲' : '▼'}</span>
-          <span>${formatPct(kor.change_pct)}</span>
-          <span class="change-amount">(${formatSigned(kor.change)}원)</span>
-        </div>
-        <div class="stock-meta">
-          <div class="stock-meta-item">
-            <div class="label">거래량</div>
-            <div class="value">${formatNumber(kor.volume)}</div>
-          </div>
-          <div class="stock-meta-item">
-            <div class="label">${escapeHtml(historyStart)} 종가</div>
-            <div class="value">${formatNumber(kor.history?.[0]?.close || 0)}원</div>
-          </div>
-        </div>
-      </div>
-      <div class="mini-chart-wrap">
-        <div class="chart-label">${escapeHtml(historyStart)} ~ 현재 일별 종가</div>
-        <div class="mini-chart-container"><canvas id="korChart"></canvas></div>
-      </div>
+    <div class="section-title">
+      경쟁사 비교
+      <span class="note">※ 국내(이노션) · 글로벌 4사 · 본국 통화 기준 · 글로벌은 직전 거래일 종가</span>
     </div>
+    <div class="competitor-grid">${competitorCards}</div>
   </div>
 
   <!-- 3. 국내 벤치마크 지수 -->
@@ -347,15 +364,6 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
     <div class="index-grid">${indexCards}</div>
   </div>
 
-  <!-- 4. 글로벌 광고대행사 -->
-  <div class="section">
-    <div class="section-title">
-      글로벌 광고대행사
-      <span class="note">※ 시장 시차로 직전 거래일 종가 기준 · 본국 통화 표기</span>
-    </div>
-    <div class="competitor-grid">${globalCards}</div>
-  </div>
-
   <!-- 5. 환율 -->
   <div class="section">
     <div class="section-title">
@@ -365,14 +373,64 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
     <div class="forex-grid">${forexCards}</div>
   </div>
 
-  <!-- 6. 정규화 누적 수익률 비교 차트 -->
+  ${(() => {
+    const flow = marketData.investorFlow;
+    if (!flow || !flow.cumulative || flow.cumulative.length === 0) return '';
+    const latest = flow.latest || {};
+    const fmtVol = (n) => {
+      if (!n) return '0';
+      const sign = n >= 0 ? '+' : '-';
+      const abs = Math.abs(n);
+      return sign + abs.toLocaleString('ko-KR');
+    };
+    return `
+  <!-- 5b. 자사 종목 기관/외국인/개인 수급 (당월 누적) -->
   <div class="section">
     <div class="section-title">
-      누적 수익률 비교 (자사 · 국내 경쟁사 · 지수 · 글로벌 4사)
-      <span class="note">${escapeHtml(historyStart)} = 100 기준 정규화 (%)</span>
+      자사 종목 투자자 수급 (당월 누적)
+      <span class="note">${escapeHtml(flow.monthStart || '')} ~ 현재 · 단위: 주 · 개인 = 잔여(외국인+기관 反向)</span>
+    </div>
+    <div class="investor-wrap">
+      <div class="investor-summary">
+        <div class="investor-stat ${latest.foreignCum >= 0 ? 'up' : 'down'}">
+          <div class="stat-label">외국인 누적 순매매</div>
+          <div class="stat-value">${fmtVol(latest.foreignCum)}<span class="stat-unit">주</span></div>
+        </div>
+        <div class="investor-stat ${latest.instCum >= 0 ? 'up' : 'down'}">
+          <div class="stat-label">기관 누적 순매매</div>
+          <div class="stat-value">${fmtVol(latest.instCum)}<span class="stat-unit">주</span></div>
+        </div>
+        <div class="investor-stat ${latest.indivCum >= 0 ? 'up' : 'down'}">
+          <div class="stat-label">개인 누적 순매매</div>
+          <div class="stat-value">${fmtVol(latest.indivCum)}<span class="stat-unit">주</span></div>
+        </div>
+      </div>
+      <div class="investor-chart-container"><canvas id="investorChart"></canvas></div>
+    </div>
+  </div>`;
+  })()}
+
+  <!-- 6a. 자사 vs 국내 지수 토글 비교 차트 -->
+  <div class="section">
+    <div class="section-title">
+      자사 vs 국내 지수 비교 (토글)
+      <span class="note">${escapeHtml(historyStart)} = 100 기준 정규화 (%) · 범례 클릭으로 표시/숨김</span>
     </div>
     <div class="normalized-chart-wrap">
-      <div class="chart-title">자사 vs 이노션 vs KOSPI/KOSPI 200 vs 글로벌 4사</div>
+      <div class="chart-title">제일기획 · KOSPI · KOSPI 일반서비스</div>
+      <div class="chart-subtitle">국내 시장(KOSPI 전체) 및 광고 섹터(일반서비스) 대비 자사 상대 수익률</div>
+      <div class="toggle-chart-container"><canvas id="toggleChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- 6b. 정규화 누적 수익률 비교 차트 (전체) -->
+  <div class="section">
+    <div class="section-title">
+      누적 수익률 비교 (전체)
+      <span class="note">${escapeHtml(historyStart)} = 100 기준 정규화 (%) · 자사 + 경쟁사 + 지수 일괄</span>
+    </div>
+    <div class="normalized-chart-wrap">
+      <div class="chart-title">자사 + 경쟁사(이노션 + 글로벌 4사) + KOSPI/KOSPI 일반서비스</div>
       <div class="chart-subtitle">각 종목 본국 통화 기준 종가를 ${escapeHtml(historyStart)} 가격으로 정규화한 누적 수익률(%)</div>
       <div class="normalized-chart-container"><canvas id="normalizedChart"></canvas></div>
     </div>
@@ -453,32 +511,7 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
     });
   }
 
-  // 국내 경쟁사 (이노션) 시계열
-  const korHistory = ${JSON.stringify(kor.history || [])};
-  const korIsUp = ${isKorUp};
-  if (korHistory.length > 0) {
-    new Chart(document.getElementById('korChart'), {
-      type: 'line',
-      data: {
-        labels: korHistory.map(h => h.date),
-        datasets: [{
-          data: korHistory.map(h => h.close),
-          borderColor: korIsUp ? RED : BLUE,
-          backgroundColor: korIsUp ? 'rgba(210,60,60,0.08)' : 'rgba(44,92,210,0.08)',
-          borderWidth: 2, tension: 0.25, fill: true,
-          pointRadius: 0, pointHoverRadius: 4
-        }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { backgroundColor: NAVY, padding: 8, callbacks: { label: (ctx) => ctx.parsed.y.toLocaleString() + '원' } } },
-        scales: {
-          x: { grid: { display: false }, ticks: { font: { family: 'Pretendard', size: 10 }, color: GRAY, maxTicksLimit: 8 } },
-          y: { grid: { color: GRID }, ticks: { font: { family: 'Pretendard', size: 10 }, color: GRAY, callback: (v) => v.toLocaleString() } }
-        }
-      }
-    });
-  }
+  // (국내 경쟁사 단독 차트는 통합 경쟁사 그리드로 이동되어 별도 처리 불필요)
 
   // 지수 미니 차트들
   const indexHistories = ${JSON.stringify(indexes.map((i) => ({ name: i.name, history: i.history, isUp: i.change_pct >= 0 })))};
@@ -504,18 +537,18 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
     });
   });
 
-  // 글로벌 4사 미니 차트
-  const globalHistories = ${JSON.stringify(globals.map((g) => ({ name: g.name, history: g.history, isUp: g.change_pct >= 0 })))};
-  globalHistories.forEach((g, n) => {
-    const el = document.getElementById('globalChart' + n);
-    if (!el || !g.history.length) return;
+  // 경쟁사 통합 미니 차트 (이노션 + 글로벌 4사 = 5장)
+  const competitorHistories = ${JSON.stringify(competitorsAll.map((c) => ({ name: c.name, history: c.history, isUp: c.change_pct >= 0 })))};
+  competitorHistories.forEach((c, n) => {
+    const el = document.getElementById('compChart' + n);
+    if (!el || !c.history.length) return;
     new Chart(el, {
       type: 'line',
       data: {
-        labels: g.history.map(h => h.date),
+        labels: c.history.map(h => h.date),
         datasets: [{
-          data: g.history.map(h => h.close),
-          borderColor: g.isUp ? RED : BLUE,
+          data: c.history.map(h => h.close),
+          borderColor: c.isUp ? RED : BLUE,
           borderWidth: 1.4, tension: 0.25, fill: false,
           pointRadius: 0, pointHoverRadius: 3
         }]
@@ -551,6 +584,100 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
       }
     });
   });
+
+  // 자사 종목 투자자 수급 누적 차트 (당월)
+  const investorData = ${JSON.stringify(marketData.investorFlow?.cumulative || [])};
+  if (investorData.length > 0) {
+    const investorEl = document.getElementById('investorChart');
+    if (investorEl) {
+      new Chart(investorEl, {
+        type: 'line',
+        data: {
+          labels: investorData.map(d => d.date.slice(5)),  // MM-DD
+          datasets: [
+            { label: '외국인', data: investorData.map(d => d.foreign), borderColor: '#d23c3c', backgroundColor: 'rgba(210,60,60,0.06)', borderWidth: 2, tension: 0.2, pointRadius: 0, pointHoverRadius: 4, fill: false },
+            { label: '기관', data: investorData.map(d => d.institution), borderColor: '#0a2540', backgroundColor: 'rgba(10,37,64,0.06)', borderWidth: 2, tension: 0.2, pointRadius: 0, pointHoverRadius: 4, fill: false },
+            { label: '개인', data: investorData.map(d => d.individual), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.06)', borderWidth: 2, tension: 0.2, pointRadius: 0, pointHoverRadius: 4, fill: false },
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { position: 'bottom', labels: { font: { family: 'Pretendard', size: 12, weight: '600' }, boxWidth: 14, padding: 14 } },
+            tooltip: {
+              backgroundColor: NAVY, padding: 10, mode: 'index', intersect: false,
+              callbacks: { label: (ctx) => ctx.dataset.label + ': ' + (ctx.parsed.y >= 0 ? '+' : '') + ctx.parsed.y.toLocaleString() + '주' }
+            }
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { font: { family: 'Pretendard', size: 11 }, color: GRAY } },
+            y: {
+              grid: { color: GRID },
+              ticks: { font: { family: 'Pretendard', size: 11 }, color: GRAY, callback: (v) => (v >= 0 ? '+' : '') + v.toLocaleString() },
+              title: { display: true, text: '누적 순매매 (주)', font: { family: 'Pretendard', size: 11, weight: '600' }, color: GRAY }
+            }
+          }
+        }
+      });
+    }
+  }
+
+  // 자사 vs 국내 지수 토글 비교 차트 (3개 라인만)
+  // 라벨은 자사 history 기준 (가장 긴 시계열 사용)
+  const toggleDatasets = ${JSON.stringify([
+    { name: `${main.name} (자사)`, data: normalizeSeries(main.history), color: '#0a2540', width: 3 },
+    ...indexes.map((i, idx) => ({
+      name: i.name,
+      data: normalizeSeries(i.history),
+      color: idx === 0 ? '#6b7c93' : '#f59e0b',
+      width: 2,
+      dash: idx === 0 ? [4, 4] : [],
+    })),
+  ].filter((ds) => ds.data.length > 0))};
+  const toggleLabels = ${JSON.stringify((main.history || []).map((h) => h.date))};
+  if (toggleDatasets.length > 0) {
+    const toggleEl = document.getElementById('toggleChart');
+    if (toggleEl) {
+      new Chart(toggleEl, {
+        type: 'line',
+        data: {
+          labels: toggleLabels,
+          datasets: toggleDatasets.map(ds => ({
+            label: ds.name,
+            data: ds.data.map(d => d.pct),
+            borderColor: ds.color,
+            backgroundColor: 'transparent',
+            borderWidth: ds.width,
+            borderDash: ds.dash || [],
+            tension: 0.2,
+            pointRadius: 0,
+            pointHoverRadius: 4
+          }))
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            // Chart.js 기본 legend.onClick = toggle (별도 구현 불필요)
+            legend: { position: 'top', labels: { font: { family: 'Pretendard', size: 13, weight: '600' }, boxWidth: 16, padding: 16, usePointStyle: true } },
+            tooltip: {
+              backgroundColor: NAVY, padding: 10, mode: 'index', intersect: false,
+              callbacks: { label: (ctx) => ctx.dataset.label + ': ' + (ctx.parsed.y > 0 ? '+' : '') + ctx.parsed.y.toFixed(2) + '%' }
+            }
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { font: { family: 'Pretendard', size: 10 }, color: GRAY, maxTicksLimit: 12 } },
+            y: {
+              grid: { color: GRID },
+              ticks: { font: { family: 'Pretendard', size: 11 }, color: GRAY, callback: (v) => (v > 0 ? '+' : '') + v + '%' },
+              title: { display: true, text: '누적 수익률 (%)', font: { family: 'Pretendard', size: 11, weight: '600' }, color: GRAY }
+            }
+          }
+        }
+      });
+    }
+  }
 
   // 정규화 누적 수익률 비교 차트
   const normData = ${JSON.stringify(normalizedDatasets)};

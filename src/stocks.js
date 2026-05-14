@@ -177,33 +177,92 @@ async function fetchKrxIndexLatest(indexName, env, maxBack = 7) {
   throw new Error(`최근 ${maxBack}영업일 KRX 데이터 없음: ${errors.slice(0, 3).join('; ')}`);
 }
 
+// fetchKrxIndex 외부 노출 (index.js의 /backfill에서 사용)
+export { fetchKrxIndex };
+
+// R2 캐시 키
+export const krxHistoryCacheKey = (krxName) => `history/krx_${krxName}.json`;
+
+/**
+ * R2에서 KRX 시계열 캐시 읽어 history 배열 반환 (오래된 → 최신)
+ * @returns Array<{date: 'YYYY-MM-DD', close, change, changeRate}>
+ */
+export async function readKrxHistoryCache(env, krxName) {
+  try {
+    const obj = await env.REPORTS.get(krxHistoryCacheKey(krxName));
+    if (!obj) return [];
+    const arr = JSON.parse(await obj.text());
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) {
+    console.error(`[캐시 읽기 실패] ${krxName}: ${e.message}`);
+    return [];
+  }
+}
+
+export async function writeKrxHistoryCache(env, krxName, cached) {
+  await env.REPORTS.put(krxHistoryCacheKey(krxName), JSON.stringify(cached));
+}
+
 export async function fetchKoreanIndex(cfg, fromDate, env) {
   if (cfg.source === 'krx') {
-    // KRX Open API 경로 (일반서비스 지수 등)
+    // ① R2 캐시 읽기 (12/1~어제 백필 데이터)
+    let cached = await readKrxHistoryCache(env, cfg.krxName);
+    const cachedDates = new Set(cached.map((d) => d.date));
+
+    // ② 최신 영업일 데이터 가져오기 + 캐시에 없으면 증분 추가
+    let latestKrx = null;
     try {
-      const krx = await fetchKrxIndexLatest(cfg.krxName, env);
-      return {
-        name: cfg.name, // UI 라벨: "KOSPI 일반서비스"
-        code: cfg.krxName,
-        currency: 'pt',
-        price: krx.close,
-        change: krx.change,
-        change_pct: krx.changeRate,
-        volume: 0,
-        market_cap: '',
-        history: [], // KRX Open API는 일자별 단일조회만 — 시계열 백필은 향후
-        tradeDate: `${krx.basDd.slice(0,4)}-${krx.basDd.slice(4,6)}-${krx.basDd.slice(6,8)}`,
-        url: 'https://data.krx.co.kr/',
-        source: 'KRX Open API',
-      };
+      latestKrx = await fetchKrxIndexLatest(cfg.krxName, env);
+      const latestIso = `${latestKrx.basDd.slice(0, 4)}-${latestKrx.basDd.slice(4, 6)}-${latestKrx.basDd.slice(6, 8)}`;
+      if (!cachedDates.has(latestIso)) {
+        cached.push({
+          date: latestIso,
+          close: latestKrx.close,
+          change: latestKrx.change,
+          changeRate: latestKrx.changeRate,
+        });
+        cached.sort((a, b) => a.date.localeCompare(b.date));
+        await writeKrxHistoryCache(env, cfg.krxName, cached);
+      }
     } catch (e) {
-      console.error(`[KRX 지수 실패] ${cfg.name}: ${e.message}`);
-      return {
-        name: cfg.name, code: cfg.krxName, currency: 'pt',
-        price: 0, change: 0, change_pct: 0, volume: 0, market_cap: '',
-        history: [], error: e.message, source: 'KRX Open API',
-      };
+      console.error(`[KRX 최신 실패] ${cfg.name}: ${e.message}`);
+      if (cached.length === 0) {
+        return {
+          name: cfg.name, code: cfg.krxName, currency: 'pt',
+          price: 0, change: 0, change_pct: 0, volume: 0, market_cap: '',
+          history: [], error: e.message, source: 'KRX Open API',
+        };
+      }
     }
+
+    // ③ history 형식 정렬 — 기존 템플릿 호환
+    const history = cached.map((d) => ({
+      date: `${parseInt(d.date.slice(5, 7), 10)}/${parseInt(d.date.slice(8, 10), 10)}`,
+      isoDate: d.date,
+      close: d.close,
+    }));
+
+    const last = cached[cached.length - 1];
+    const price = latestKrx?.close ?? last?.close ?? 0;
+    const change = latestKrx?.change ?? last?.change ?? 0;
+    const change_pct = latestKrx?.changeRate ?? last?.changeRate ?? 0;
+    const tradeDate = latestKrx
+      ? `${latestKrx.basDd.slice(0, 4)}-${latestKrx.basDd.slice(4, 6)}-${latestKrx.basDd.slice(6, 8)}`
+      : last?.date || '';
+
+    return {
+      name: cfg.name,
+      code: cfg.krxName,
+      currency: 'pt',
+      price, change, change_pct,
+      volume: 0,
+      market_cap: '',
+      history,
+      tradeDate,
+      url: 'https://data.krx.co.kr/',
+      source: 'KRX Open API',
+      historyCount: history.length,
+    };
   }
   // 기본: 네이버 siseJson 경로 (KOSPI 등 시계열 지원)
   return fetchNaverSeries(cfg, fromDate, true);

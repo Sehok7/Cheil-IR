@@ -2,12 +2,13 @@
 // - scheduled(): 매일 KST 09:30 (UTC 00:30) 자동 실행
 // - fetch(): R2의 리포트 서빙 (/, /YYYY-MM-DD, /archive, /run)
 
-import { fetchAllMarketData } from './stocks.js';
+import { fetchAllMarketData, fetchKrxIndex, readKrxHistoryCache, writeKrxHistoryCache } from './stocks.js';
 import { fetchAllForex } from './forex.js';
+import { fetchInvestorFlowMonthly } from './investor.js';
 import { collectTopNews } from './news.js';
 import { summarizeNews, generateMarketInsight } from './ai.js';
 import { renderDashboard, renderArchive } from './template.js';
-import { kstDateString, kstKoreanDate, relativeTime } from './utils.js';
+import { kstDateString, kstKoreanDate, kstNow, relativeTime } from './utils.js';
 
 function getHistoryStart(env) {
   // env.HISTORY_START = '2025-12-01' (ISO format)
@@ -23,15 +24,17 @@ async function buildAndStoreReport(env) {
   const { iso: histIso, yyyymmdd: histDate } = getHistoryStart(env);
   console.log(`  HISTORY_START = ${histIso}`);
 
-  // 1. 모든 데이터 병렬 수집 (12/1부터 시계열)
-  console.log('[1/3] 데이터 수집 (12/1~당일 시계열)...');
-  const [stockResult, forexList, newsList] = await Promise.all([
+  // 1. 모든 데이터 병렬 수집 (12/1부터 시계열 + 당월 수급)
+  console.log('[1/3] 데이터 수집 (시계열 + 수급 + 뉴스)...');
+  const companyCode = env.COMPANY_CODE || '030000';
+  const [stockResult, forexList, newsList, investorFlow] = await Promise.all([
     fetchAllMarketData(histDate, env),
     fetchAllForex(histIso),
     collectTopNews(env, 5),
+    fetchInvestorFlowMonthly(companyCode),
   ]);
 
-  const marketData = { ...stockResult, forex: forexList };
+  const marketData = { ...stockResult, forex: forexList, investorFlow };
 
   if (!newsList || newsList.length === 0) {
     console.warn('뉴스 수집 결과가 비어있습니다.');
@@ -83,6 +86,7 @@ async function buildAndStoreReport(env) {
     indexes: marketData.indexes.map((i) => ({ name: i.name, change_pct: i.change_pct, error: i.error })),
     globals: marketData.globals.map((g) => ({ name: g.name, change_pct: g.change_pct, error: g.error })),
     forex: marketData.forex.map((f) => ({ pair: f.pair, rate: f.rate, error: f.error })),
+    investorFlow: marketData.investorFlow?.latest || null,
     newsCount: newsWithSummary.length,
   };
 }
@@ -129,6 +133,65 @@ export default {
         return Response.json({ ok: true, ...result });
       } catch (e) {
         return Response.json({ ok: false, error: e.message, stack: e.stack }, { status: 500 });
+      }
+    }
+
+    // KRX 일별 호출 점진적 백필 (Workers Free 50 subrequest 한도 회피)
+    // /backfill?index=일반서비스&start=2025-12-01&days=30
+    // 한 번 호출당 최대 'days'일치 백필. 사용자 4번 호출 ≈ 109일 완성.
+    if (path === '/backfill') {
+      const idxName = url.searchParams.get('index') || '일반서비스';
+      const startStr = url.searchParams.get('start') || env.HISTORY_START || '2025-12-01';
+      const maxDays = Math.max(1, Math.min(40, parseInt(url.searchParams.get('days') || '30', 10)));
+
+      try {
+        const cached = await readKrxHistoryCache(env, idxName);
+        const cachedDates = new Set(cached.map((d) => d.date));
+
+        const today = kstNow();
+        const todayIso = today.toISOString().slice(0, 10);
+        let cur = new Date(startStr + 'T00:00:00Z');
+        let added = 0;
+        const errors = [];
+
+        while (cur.toISOString().slice(0, 10) <= todayIso && added < maxDays) {
+          const isoStr = cur.toISOString().slice(0, 10);
+          const day = cur.getUTCDay();
+          // 평일이고 캐시에 없는 경우만 호출
+          if (day !== 0 && day !== 6 && !cachedDates.has(isoStr)) {
+            try {
+              const result = await fetchKrxIndex(isoStr, idxName, env);
+              cached.push({
+                date: isoStr,
+                close: result.close,
+                change: result.change,
+                changeRate: result.changeRate,
+              });
+              cachedDates.add(isoStr);
+              added++;
+            } catch (e) {
+              errors.push(`${isoStr}: ${e.message}`);
+              // 휴장일은 흔하므로 무시하고 진행
+            }
+          }
+          cur.setUTCDate(cur.getUTCDate() + 1);
+        }
+
+        cached.sort((a, b) => a.date.localeCompare(b.date));
+        await writeKrxHistoryCache(env, idxName, cached);
+
+        return Response.json({
+          ok: true,
+          index: idxName,
+          added,
+          total: cached.length,
+          firstDate: cached[0]?.date || null,
+          lastDate: cached[cached.length - 1]?.date || null,
+          remainingHint: added === maxDays ? '추가 백필 필요 — /backfill 다시 호출' : '완료 — 더 이상 추가할 영업일 없음',
+          errors_sample: errors.slice(0, 5),
+        });
+      } catch (e) {
+        return Response.json({ ok: false, error: e.message }, { status: 500 });
       }
     }
 
