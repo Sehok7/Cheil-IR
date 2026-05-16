@@ -50,12 +50,14 @@ const CSS = `
   .idx-up { color: var(--red); }
   .idx-down { color: var(--blue); }
   .idx-mini-chart { height: 56px; position: relative; }
-  /* Competitor grid (국내 1 + 글로벌 4 = 5장) */
+  /* Competitor grid (국내 1 + 글로벌 4 = 5장) — 데스크탑은 grid, 좁은 화면은 가로 슬라이드 */
   .competitor-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 16px; }
   .competitor-card.is-kor { border-color: var(--navy); }
   .competitor-card .comp-flag { display: inline-block; font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 3px; letter-spacing: 0.5px; margin-bottom: 4px; }
   .competitor-card .comp-flag.kor { background: rgba(10,37,64,0.08); color: var(--navy); }
   .competitor-card .comp-flag.global { background: rgba(138,138,138,0.12); color: var(--gray-700); }
+  /* 가로 스크롤 힌트(우측 fade) */
+  .competitor-scroll-wrap { position: relative; }
   .competitor-card { background: var(--white); border: 1px solid var(--border); border-radius: 8px; padding: 18px 20px; transition: border-color 0.15s; }
   .competitor-card:hover { border-color: var(--navy); }
   .competitor-card .comp-name { font-size: 13px; font-weight: 700; color: var(--gray-700); margin-bottom: 2px; }
@@ -121,22 +123,70 @@ const CSS = `
   .insight-block ul li:before { content: '▸'; position: absolute; left: 0; color: rgba(255,255,255,0.5); font-size: 11px; top: 11px; }
   .insight-block .cause-box { background: rgba(255,255,255,0.08); border-radius: 6px; padding: 14px 18px; margin-top: 8px; }
   .footer { text-align: center; font-size: 11px; color: var(--gray-500); margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--border); }
+  /* 1100px 이하: 경쟁사 그리드를 가로 스크롤 carousel로 전환 */
   @media (max-width: 1100px) {
-    .competitor-grid { grid-template-columns: repeat(3, 1fr); }
+    .competitor-grid {
+      display: flex;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scroll-snap-type: x mandatory;
+      scrollbar-width: thin;
+      padding-bottom: 10px;
+      margin-left: -4px;
+      margin-right: -4px;
+      padding-left: 4px;
+      padding-right: 4px;
+    }
+    .competitor-grid::-webkit-scrollbar { height: 6px; }
+    .competitor-grid::-webkit-scrollbar-thumb { background: rgba(10,37,64,0.2); border-radius: 3px; }
+    .competitor-card {
+      flex: 0 0 240px;
+      scroll-snap-align: start;
+    }
+    .competitor-card .comp-mini-chart { height: 50px; }
   }
   @media (max-width: 900px) {
-    .main-stock-card { grid-template-columns: 1fr; }
-    .competitor-grid { grid-template-columns: repeat(2, 1fr); }
+    body { padding: 20px 14px; }
+    .main-stock-card { grid-template-columns: 1fr; padding: 22px 20px; }
+    .header { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .header-right { text-align: left; }
     .index-grid, .forex-grid { grid-template-columns: 1fr; }
     .insight-grid { grid-template-columns: 1fr; }
     .normalized-chart-container, .toggle-chart-container { height: 280px; }
     .investor-summary { grid-template-columns: 1fr; }
+    .insight-panel { padding: 22px 18px; }
+    .stock-info .price { font-size: 36px; }
+    .header-left h1 { font-size: 20px; }
+    .section-title { flex-wrap: wrap; }
   }
   @media (max-width: 600px) {
-    .competitor-grid { grid-template-columns: 1fr; }
+    body { padding: 14px 10px; }
+    .news-item { grid-template-columns: 28px 1fr; padding: 14px 16px; gap: 10px; }
+    .main-stock-card { padding: 18px 16px; }
+    .normalized-chart-wrap, .investor-wrap { padding: 16px 14px; }
+    .normalized-chart-container, .toggle-chart-container { height: 240px; }
   }
   /* Toggle chart (자사 vs 국내 지수) */
   .toggle-chart-container { position: relative; height: 320px; }
+  /* 커스텀 토글 버튼 */
+  .toggle-buttons { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .toggle-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 14px; border-radius: 999px;
+    border: 1.5px solid var(--border); background: var(--white);
+    font-family: 'Pretendard', sans-serif; font-size: 13px; font-weight: 600;
+    color: var(--gray-700); cursor: pointer;
+    transition: all 0.18s ease; user-select: none;
+  }
+  .toggle-btn:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(10,37,64,0.08); }
+  .toggle-btn .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--gray-300); transition: background 0.18s ease;
+  }
+  .toggle-btn.active { color: var(--white); border-color: transparent; }
+  .toggle-btn.active .dot { background: var(--white); }
+  .toggle-btn.inactive { opacity: 0.55; }
+  .toggle-btn .check { font-size: 11px; margin-left: 2px; }
 `;
 
 function fmtCurrency(value, currency) {
@@ -346,7 +396,21 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
     </div>
   </div>
 
-  <!-- 2. 경쟁사 (이노션 + 글로벌 4사 통합 그리드) -->
+  <!-- 2. 자사 vs 국내 지수 토글 비교 차트 (자사 주가 바로 밑으로 이동) -->
+  <div class="section">
+    <div class="section-title">
+      자사 vs 국내 지수 비교 (토글)
+      <span class="note">${escapeHtml(historyStart)} = 100 정규화 · 버튼 클릭으로 표시/숨김</span>
+    </div>
+    <div class="normalized-chart-wrap">
+      <div class="chart-title">제일기획 · KOSPI · KOSPI 일반서비스</div>
+      <div class="chart-subtitle">국내 시장(KOSPI 전체) 및 광고 섹터(일반서비스) 대비 자사 상대 수익률 — 아래 버튼으로 라인 토글</div>
+      <div class="toggle-buttons" id="toggleButtons"></div>
+      <div class="toggle-chart-container"><canvas id="toggleChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- 3. 경쟁사 (이노션 + 글로벌 4사 통합 그리드) -->
   <div class="section">
     <div class="section-title">
       경쟁사 비교
@@ -410,20 +474,7 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
   </div>`;
   })()}
 
-  <!-- 6a. 자사 vs 국내 지수 토글 비교 차트 -->
-  <div class="section">
-    <div class="section-title">
-      자사 vs 국내 지수 비교 (토글)
-      <span class="note">${escapeHtml(historyStart)} = 100 기준 정규화 (%) · 범례 클릭으로 표시/숨김</span>
-    </div>
-    <div class="normalized-chart-wrap">
-      <div class="chart-title">제일기획 · KOSPI · KOSPI 일반서비스</div>
-      <div class="chart-subtitle">국내 시장(KOSPI 전체) 및 광고 섹터(일반서비스) 대비 자사 상대 수익률</div>
-      <div class="toggle-chart-container"><canvas id="toggleChart"></canvas></div>
-    </div>
-  </div>
-
-  <!-- 6b. 정규화 누적 수익률 비교 차트 (전체) -->
+  <!-- 정규화 누적 수익률 비교 차트 (전체) -->
   <div class="section">
     <div class="section-title">
       누적 수익률 비교 (전체)
@@ -638,8 +689,9 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
   const toggleLabels = ${JSON.stringify((main.history || []).map((h) => h.date))};
   if (toggleDatasets.length > 0) {
     const toggleEl = document.getElementById('toggleChart');
+    const toggleBtnsEl = document.getElementById('toggleButtons');
     if (toggleEl) {
-      new Chart(toggleEl, {
+      const toggleChart = new Chart(toggleEl, {
         type: 'line',
         data: {
           labels: toggleLabels,
@@ -652,15 +704,15 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
             borderDash: ds.dash || [],
             tension: 0.2,
             pointRadius: 0,
-            pointHoverRadius: 4
+            pointHoverRadius: 4,
+            hidden: false
           }))
         },
         options: {
           responsive: true, maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
           plugins: {
-            // Chart.js 기본 legend.onClick = toggle (별도 구현 불필요)
-            legend: { position: 'top', labels: { font: { family: 'Pretendard', size: 13, weight: '600' }, boxWidth: 16, padding: 16, usePointStyle: true } },
+            legend: { display: false }, // 커스텀 토글 버튼으로 대체
             tooltip: {
               backgroundColor: NAVY, padding: 10, mode: 'index', intersect: false,
               callbacks: { label: (ctx) => ctx.dataset.label + ': ' + (ctx.parsed.y > 0 ? '+' : '') + ctx.parsed.y.toFixed(2) + '%' }
@@ -676,6 +728,46 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
           }
         }
       });
+
+      // 커스텀 토글 버튼 렌더링 + 상태 관리
+      if (toggleBtnsEl) {
+        toggleDatasets.forEach((ds, idx) => {
+          const btn = document.createElement('button');
+          btn.className = 'toggle-btn active';
+          btn.type = 'button';
+          btn.style.background = ds.color;
+          btn.style.borderColor = ds.color;
+          btn.dataset.idx = idx;
+          btn.innerHTML = '<span class="dot"></span><span>' + ds.name + '</span><span class="check">✓</span>';
+          btn.addEventListener('click', () => {
+            const i = parseInt(btn.dataset.idx, 10);
+            const meta = toggleChart.getDatasetMeta(i);
+            meta.hidden = !meta.hidden;
+            toggleChart.update();
+            if (meta.hidden) {
+              btn.classList.remove('active');
+              btn.classList.add('inactive');
+              btn.style.background = 'var(--white)';
+              btn.style.borderColor = 'var(--border)';
+              btn.style.color = ds.color;
+              btn.querySelector('.dot').style.background = ds.color;
+              btn.querySelector('.check').textContent = '';
+            } else {
+              btn.classList.add('active');
+              btn.classList.remove('inactive');
+              btn.style.background = ds.color;
+              btn.style.borderColor = ds.color;
+              btn.style.color = '#ffffff';
+              btn.querySelector('.dot').style.background = '#ffffff';
+              btn.querySelector('.check').textContent = '✓';
+            }
+          });
+          // 초기 활성 색
+          btn.style.color = '#ffffff';
+          btn.querySelector('.dot').style.background = '#ffffff';
+          toggleBtnsEl.appendChild(btn);
+        });
+      }
     }
   }
 
