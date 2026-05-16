@@ -15,10 +15,11 @@ binding = "REPORTS"
 bucket_name = "cheil-ir-reports"
 
 # Secrets (wrangler secret put 으로 등록):
-# - ANTHROPIC_API_KEY
 # - NAVER_CLIENT_ID
 # - NAVER_CLIENT_SECRET
 # - KRX_AUTH_KEY      ← KRX Open API 인증키 (KOSPI 일반서비스 지수)
+# - YOUTUBE_API_KEY   ← YouTube Data API v3 (관련 쇼츠 검색)
+# (ANTHROPIC_API_KEY는 v5에서 제거 — Claude API 미사용)
 
 [vars]
 COMPANY_NAME = "제일기획"

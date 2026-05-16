@@ -20,7 +20,7 @@ const HIGH_VALUE_KEYWORDS = [
   '신사업', '전략', '투자', '협력', 'AI',
 ];
 
-// 글로벌 광고대행사 + 한국 동종업계 (자사명은 별도 큰 가산점)
+// 글로벌 광고대행사 + 한국 동종업계 (당사명은 별도 큰 가산점)
 const COMPETITORS = ['퍼블리시스', 'Publicis', '덴츠', 'Dentsu', 'WPP', '옴니콤', 'Omnicom', '이노션', '에코마케팅'];
 
 const SOURCE_MAP = {

@@ -3,7 +3,7 @@
 // - 글로벌 4사: Yahoo Finance period1/period2
 import { kstTimestamp, kstNow } from './utils.js';
 
-// 자사
+// 당사
 export const COMPANY = { name: '제일기획', code: '030000', market: 'KOSPI' };
 
 // 국내 경쟁사 (김 팀장 요청: 이노션만 1개)

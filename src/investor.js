@@ -36,7 +36,7 @@ async function fetchFrgnPage(code, page) {
 }
 
 /**
- * 자사 종목의 당월(매월 1일부터 오늘까지) 외국인/기관/개인 일별 순매매 + 누적
+ * 당사 종목의 당월(매월 1일부터 오늘까지) 외국인/기관/개인 일별 순매매 + 누적
  * @returns {object} { code, monthStart, daily, cumulative, latest, error? }
  *   daily: [{ date, foreign, institution, individual }, ...] (오래된 → 최신)
  *   cumulative: [{ date, foreign, institution, individual }, ...] (누적)
