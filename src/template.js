@@ -691,6 +691,16 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
   const GRAY = '#8a8a8a';
   const GRID = '#e5e7eb';
 
+  // 날짜 x축: 오늘(가장 최근 데이터포인트)은 항상 라벨 표시, 나머지는 균등 간격으로 축약
+  function lastTickCallback(maxTicks) {
+    return function(value, index) {
+      const total = this.getLabels().length;
+      if (index === total - 1) return this.getLabelForValue(value);
+      const step = Math.max(1, Math.ceil(total / maxTicks));
+      return index % step === 0 ? this.getLabelForValue(value) : '';
+    };
+  }
+
   // 당사 시계열
   const mainHistory = ${JSON.stringify(main.history || [])};
   const mainIsUp = ${isMainUp};
@@ -714,7 +724,7 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
           tooltip: { backgroundColor: NAVY, padding: 8, callbacks: { label: (ctx) => ctx.parsed.y.toLocaleString() + '원' } }
         },
         scales: {
-          x: { grid: { display: false }, ticks: { font: { family: 'Pretendard', size: 10 }, color: GRAY, maxTicksLimit: 8 } },
+          x: { grid: { display: false }, ticks: { font: { family: 'Pretendard', size: 10 }, color: GRAY, autoSkip: false, callback: lastTickCallback(8) } },
           y: { grid: { color: GRID }, ticks: { font: { family: 'Pretendard', size: 10 }, color: GRAY, callback: (v) => v.toLocaleString() } }
         }
       }
@@ -854,7 +864,7 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
             }
           },
           scales: {
-            x: { grid: { display: false }, ticks: { font: { family: 'Pretendard', size: 11 }, color: GRAY } },
+            x: { grid: { display: false }, ticks: { font: { family: 'Pretendard', size: 11 }, color: GRAY, autoSkip: false, callback: lastTickCallback(10) } },
             y: {
               min: 0, max: 40,
               grid: { color: GRID },
@@ -898,7 +908,7 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
             }
           },
           scales: {
-            x: { grid: { display: false }, ticks: { font: { family: 'Pretendard', size: 11 }, color: GRAY } },
+            x: { grid: { display: false }, ticks: { font: { family: 'Pretendard', size: 11 }, color: GRAY, autoSkip: false, callback: lastTickCallback(10) } },
             y: {
               grid: { color: GRID },
               ticks: { font: { family: 'Pretendard', size: 11 }, color: GRAY, callback: (v) => (v >= 0 ? '+' : '') + v.toLocaleString() },
@@ -955,7 +965,7 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
             }
           },
           scales: {
-            x: { grid: { display: false }, ticks: { font: { family: 'Pretendard', size: 10 }, color: GRAY, maxTicksLimit: 12 } },
+            x: { grid: { display: false }, ticks: { font: { family: 'Pretendard', size: 10 }, color: GRAY, autoSkip: false, callback: lastTickCallback(12) } },
             y: {
               grid: { color: GRID },
               ticks: { font: { family: 'Pretendard', size: 11 }, color: GRAY, callback: (v) => (v > 0 ? '+' : '') + v + '%' },
@@ -1037,7 +1047,7 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
         }
       },
       scales: {
-        x: { grid: { display: false }, ticks: { font: { family: 'Pretendard', size: 10 }, color: GRAY, maxTicksLimit: 12 } },
+        x: { grid: { display: false }, ticks: { font: { family: 'Pretendard', size: 10 }, color: GRAY, autoSkip: false, callback: lastTickCallback(12) } },
         y: {
           grid: { color: GRID },
           ticks: {
