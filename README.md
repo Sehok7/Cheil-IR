@@ -7,7 +7,7 @@
 
 - Cloudflare Workers (서버리스 실행)
 - Cloudflare R2 (보고서 아카이브)
-- Claude API (시장 분석 + 임원 멘트)
+- 데이터 기반 자동 요약 (`src/summary.js`) — v5부터 Claude API 미사용, 비용 0
 - 네이버 검색 API (광고업계 뉴스 5건)
 - Yahoo Finance (글로벌 4사 시세)
 - KRX Open API (KOSPI 일반서비스 지수)
@@ -27,10 +27,10 @@
 2. Workers & Pages → Create → Import a repository
 3. 이 GitHub repo 연결
 4. Secrets 등록:
-   - ANTHROPIC_API_KEY
    - NAVER_CLIENT_ID
    - NAVER_CLIENT_SECRET
    - KRX_AUTH_KEY
+   - YOUTUBE_API_KEY
 5. R2 버킷 생성 후 binding 추가
 6. Cron 등록: `30 0 * * *` (매일 KST 09:30)
 

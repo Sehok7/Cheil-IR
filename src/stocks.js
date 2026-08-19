@@ -211,6 +211,7 @@ export async function fetchKoreanIndex(cfg, fromDate, env) {
 
     // ② 최신 영업일 데이터 가져오기 + 캐시에 없으면 증분 추가
     let latestKrx = null;
+    let staleError = null;
     try {
       latestKrx = await fetchKrxIndexLatest(cfg.krxName, env);
       const latestIso = `${latestKrx.basDd.slice(0, 4)}-${latestKrx.basDd.slice(4, 6)}-${latestKrx.basDd.slice(6, 8)}`;
@@ -233,6 +234,8 @@ export async function fetchKoreanIndex(cfg, fromDate, env) {
           history: [], error: e.message, source: 'KRX Open API',
         };
       }
+      // 캐시는 있지만 오늘자 갱신은 실패 — 마지막 캐시일 기준으로 표시하되 갱신 실패임을 표기
+      staleError = e.message;
     }
 
     // ③ history 형식 정렬 — 기존 템플릿 호환
@@ -262,6 +265,8 @@ export async function fetchKoreanIndex(cfg, fromDate, env) {
       url: 'https://data.krx.co.kr/',
       source: 'KRX Open API',
       historyCount: history.length,
+      stale: staleError != null,
+      staleSince: staleError != null ? tradeDate : null,
     };
   }
   // 기본: 네이버 siseJson 경로 (KOSPI 등 시계열 지원)

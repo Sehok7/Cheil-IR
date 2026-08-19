@@ -24,6 +24,5 @@ bucket_name = "cheil-ir-reports"
 [vars]
 COMPANY_NAME = "제일기획"
 COMPANY_CODE = "030000"
-CLAUDE_MODEL = "claude-opus-4-7"
 # 시계열 백필 기준일 (Phase 2에서 활용)
 HISTORY_START = "2025-12-01"

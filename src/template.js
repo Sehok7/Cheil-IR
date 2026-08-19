@@ -63,6 +63,7 @@ const CSS = `
   .index-card .idx-price { font-size: 22px; font-weight: 800; color: var(--gray-900); letter-spacing: -0.5px; }
   .index-card .idx-change { margin-top: 6px; font-size: 13px; font-weight: 600; }
   .index-card .idx-source { margin-top: 10px; font-size: 10px; color: var(--gray-500); font-weight: 500; letter-spacing: 0.3px; }
+  .index-card .idx-stale { margin-top: 8px; font-size: 11px; color: #b45309; font-weight: 600; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 4px; padding: 4px 8px; }
   .idx-up { color: var(--red); }
   .idx-down { color: var(--blue); }
   /* Competitor grid (국내 1 + 글로벌 4 = 5장) — 데스크탑은 grid, 좁은 화면은 가로 슬라이드 */
@@ -296,6 +297,9 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
       const sourceLabel = i.source === 'KRX Open API'
         ? '<div class="idx-source">출처: 한국거래소(KRX) 공식 Open API</div>'
         : '';
+      const staleLabel = i.stale
+        ? `<div class="idx-stale">⚠ ${escapeHtml(i.staleSince || '')} 기준 데이터 (갱신 실패 — 최신 아님)</div>`
+        : '';
       return `
     <div class="index-card">
       <div class="idx-name">${escapeHtml(i.name)}</div>
@@ -304,6 +308,7 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
         ${i.change_pct >= 0 ? '▲' : '▼'} ${formatPct(i.change_pct)}
       </div>
       ${sourceLabel}
+      ${staleLabel}
     </div>`;
     })
     .join('');
@@ -378,9 +383,15 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="description" content="제일기획(030000) 및 광고업계 경쟁사(이노션·Publicis·Dentsu·WPP·Omnicom) 주가, KOSPI 벤치마크, 환율, 업계 뉴스를 매일 자동 갱신하는 IR 내부 모니터링 대시보드 - ${escapeHtml(dateStr)}">
+<meta property="og:title" content="제일기획 IR 모니터링 대시보드">
+<meta property="og:description" content="${escapeHtml(dateStr)} 기준 자사·경쟁사 주가 및 업계 동향 요약">
+<meta property="og:type" content="website">
 <title>제일기획 IR 모니터링 대시보드 - ${escapeHtml(dateStr)}</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" integrity="sha384-uGEvnSEpW2nM9xJFsrxrwakwrk9QdDTQIBJh0hVMu90OaVyMAMpAK1rIn0/Kh1/k" crossorigin="anonymous">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g" crossorigin="anonymous"></script>
 <style>${CSS}</style>
 </head>
 <body>
@@ -1066,8 +1077,10 @@ export function renderArchive(entries, currentDateStr) {
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
 <title>제일기획 IR 모니터링 - 아카이브</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" integrity="sha384-uGEvnSEpW2nM9xJFsrxrwakwrk9QdDTQIBJh0hVMu90OaVyMAMpAK1rIn0/Kh1/k" crossorigin="anonymous">
 <style>
   body { font-family: 'Pretendard', sans-serif; background: #fafbfc; color: #1a1a1a; padding: 48px 24px; }
   .container { max-width: 720px; margin: 0 auto; }
