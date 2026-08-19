@@ -47,9 +47,6 @@ const CSS = `
   .stock-info .change.up { color: var(--red); }
   .stock-info .change.down { color: var(--blue); }
   .stock-info .change-amount { color: var(--gray-500); font-weight: 500; font-size: 13px; }
-  .stock-meta { display: flex; gap: 24px; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); flex-wrap: wrap; }
-  .stock-meta-item .label { font-size: 11px; color: var(--gray-500); font-weight: 500; margin-bottom: 4px; }
-  .stock-meta-item .value { font-size: 14px; font-weight: 600; color: var(--gray-900); }
   .mini-chart-wrap { display: flex; flex-direction: column; }
   .mini-chart-wrap .chart-label { font-size: 12px; color: var(--gray-500); font-weight: 500; margin-bottom: 8px; }
   .mini-chart-container { flex: 1; position: relative; min-height: 180px; }
@@ -423,16 +420,6 @@ export function renderDashboard({ marketData, news, insight, dateStr, historySta
           <span>${isMainUp ? '▲' : '▼'}</span>
           <span>${formatPct(main.change_pct)}</span>
           <span class="change-amount">(${formatSigned(main.change)}원)</span>
-        </div>
-        <div class="stock-meta">
-          <div class="stock-meta-item">
-            <div class="label">거래량</div>
-            <div class="value">${formatNumber(main.volume)}</div>
-          </div>
-          <div class="stock-meta-item">
-            <div class="label">${escapeHtml(historyStart)} 종가</div>
-            <div class="value">${formatNumber(main.history?.[0]?.close || 0)}원</div>
-          </div>
         </div>
       </div>
       <div class="mini-chart-wrap">
